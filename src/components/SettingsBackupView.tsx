@@ -67,7 +67,7 @@ export const SettingsBackupView: React.FC<SettingsBackupViewProps> = ({
   }, []);
 
   const handleDownloadBackup = () => {
-    window.location.href = api.getBackupUrl();
+    api.downloadLocalBackup();
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {

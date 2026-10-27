@@ -6,8 +6,10 @@ import { round2, calculateDeliveryTotal, calculateDeliveryRemaining, getDelivery
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const DATA_DIR = path.resolve(__dirname, '../data');
+const isVercel = !!process.env.VERCEL;
+const DATA_DIR = isVercel ? '/tmp' : path.resolve(__dirname, '../data');
 const DB_FILE = path.resolve(DATA_DIR, 'database.json');
+const BUNDLED_DB_FILE = path.resolve(__dirname, '../data/database.json');
 
 function getDefaultDatabase(): AppDatabase {
   const defaultSupplier: Supplier = {
@@ -160,8 +162,14 @@ class DatabaseManager {
 
   private loadFromFile(): AppDatabase {
     try {
-      if (fs.existsSync(DB_FILE)) {
-        const raw = fs.readFileSync(DB_FILE, 'utf-8');
+      const targetFile = fs.existsSync(DB_FILE)
+        ? DB_FILE
+        : fs.existsSync(BUNDLED_DB_FILE)
+        ? BUNDLED_DB_FILE
+        : null;
+
+      if (targetFile) {
+        const raw = fs.readFileSync(targetFile, 'utf-8');
         const parsed = JSON.parse(raw);
         if (parsed.suppliers && parsed.deliveries && parsed.payments) {
           if (!parsed.deductions) parsed.deductions = [];
@@ -184,7 +192,7 @@ class DatabaseManager {
       fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf-8');
       fs.renameSync(tmpPath, DB_FILE);
     } catch (e) {
-      console.error('Failed to write to database file:', e);
+      console.warn('Notice: Could not write database file to disk (read-only or serverless environment):', e);
     }
   }
 

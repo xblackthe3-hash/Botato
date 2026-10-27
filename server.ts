@@ -363,7 +363,8 @@ app.post('/api/clear-demo', (_req, res) => {
 
 // --- VITE & STATIC SERVING ---
 const isProd = process.env.NODE_ENV === 'production';
-if (!isProd) {
+const isVercel = !!process.env.VERCEL;
+if (!isProd && !isVercel) {
   const { createServer: createViteServer } = await import('vite');
   const vite = await createViteServer({
     server: { middlewareMode: true },
@@ -371,13 +372,20 @@ if (!isProd) {
   });
   app.use(vite.middlewares);
 } else {
-  app.use(express.static(path.resolve(__dirname, 'dist')));
-  app.get('*', (_req, res) => {
-    res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
+  const distPath = path.resolve(__dirname, 'dist');
+  if (fs.existsSync(distPath)) {
+    app.use(express.static(distPath));
+    app.get('*', (_req, res) => {
+      res.sendFile(path.resolve(distPath, 'index.html'));
+    });
+  }
+}
+
+if (!isVercel) {
+  const PORT = Number(process.env.PORT) || 3000;
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Potato Supplier System listening on port ${PORT}`);
   });
 }
 
-const PORT = Number(process.env.PORT) || 3000;
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Potato Supplier System listening on port ${PORT}`);
-});
+export default app;
