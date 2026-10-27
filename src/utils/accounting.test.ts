@@ -9,7 +9,7 @@ import {
   buildChronologicalStatement,
   round2,
 } from './accounting.ts';
-import { Delivery, Payment } from '../types/index.ts';
+import type { Delivery, Payment } from '../types/index.ts';
 
 test('calculateDeliveryTotal correctly calculates weight * price', () => {
   // Example from prompt: 150 kg * 25 EGP = 3750 EGP

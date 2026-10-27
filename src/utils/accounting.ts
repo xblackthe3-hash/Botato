@@ -1,4 +1,4 @@
-import { Delivery, Payment, StatementMovement, StatementSummary, Deduction } from '../types/index.ts';
+import type { Delivery, Payment, StatementMovement, StatementSummary, Deduction } from '../types/index.ts';
 
 /**
  * Rounds a number to two decimal places accurately to avoid floating point drift.
