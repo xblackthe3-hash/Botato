@@ -20,6 +20,8 @@ import {
   Download,
   CheckCircle2,
   AlertTriangle,
+  Pencil,
+  Users,
 } from 'lucide-react';
 
 interface DashboardViewProps {
@@ -32,6 +34,9 @@ interface DashboardViewProps {
   onPrintDelivery: (delivery: Delivery) => void;
   onPrintPayment: (payment: Payment) => void;
   onPrintStatement: () => void;
+  onOpenEditSupplier?: (supplier: Supplier) => void;
+  onOpenAddSupplier?: () => void;
+  onOpenManageSuppliers?: () => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -44,7 +49,31 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onPrintDelivery,
   onPrintPayment,
   onPrintStatement,
+  onOpenEditSupplier,
+  onOpenAddSupplier,
+  onOpenManageSuppliers,
 }) => {
+  if (!supplier) {
+    return (
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8 sm:p-12 text-center max-w-xl mx-auto my-8">
+        <div className="w-16 h-16 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto mb-4">
+          <Truck className="w-8 h-8" />
+        </div>
+        <h2 className="text-xl font-bold text-slate-900 mb-2">مرحباً بك في نظام حسابات بطاطس مطعم الشامي</h2>
+        <p className="text-xs sm:text-sm text-slate-500 leading-relaxed mb-6">
+          لا يوجد تاجر بطاطس مسجل حالياً. ابدأ بإضافة بيانات التاجر لتتمكن من تسجيل التوريدات بالأوزان والأسعار، ومتابعة الدفعات اليومية، وطباعة الفواتير وكشوف الحساب.
+        </p>
+        <button
+          onClick={onOpenAddSupplier}
+          className="inline-flex items-center gap-2 px-6 py-3 text-sm font-bold text-white bg-amber-600 hover:bg-amber-700 active:bg-amber-800 rounded-xl transition-all cursor-pointer shadow-md shadow-amber-600/20"
+        >
+          <Plus className="w-5 h-5" />
+          <span>إضافة تاجر بطاطس جديد الآن</span>
+        </button>
+      </div>
+    );
+  }
+
   if (!stats) {
     return (
       <div className="py-12 text-center text-slate-500">
@@ -67,9 +96,31 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <span className="inline-block w-2 h-2 rounded-full bg-amber-400"></span>
               <span>مطعم الشامي · إدارة حسابات المورد</span>
             </div>
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight">
-              {supplier ? supplier.name : 'دفتر حسابات تاجر البطاطس'}
-            </h1>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight">
+                {supplier.name}
+              </h1>
+              {onOpenEditSupplier && (
+                <button
+                  onClick={() => onOpenEditSupplier(supplier)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-white/10 hover:bg-white/20 text-amber-300 hover:text-amber-200 transition-colors cursor-pointer"
+                  title="تعديل بيانات التاجر"
+                >
+                  <Pencil className="w-3 h-3" />
+                  <span>تعديل التاجر</span>
+                </button>
+              )}
+              {onOpenManageSuppliers && (
+                <button
+                  onClick={onOpenManageSuppliers}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                  title="إدارة جميع التجار"
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  <span>كل التجار</span>
+                </button>
+              )}
+            </div>
             <p className="text-xs sm:text-sm text-slate-300 max-w-xl">
               متابعة دقيقة لكل كيلو بطاطس مستلم، حساب تلقائي للفواتير، وترحيل آلي وفوري للمديونيات دون تداخل الحسابات.
             </p>

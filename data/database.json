@@ -123,6 +123,22 @@
   ],
   "auditLogs": [
     {
+      "id": "aud-1793137159622-lhkmdf",
+      "timestamp": "2026-10-27T21:39:19.622Z",
+      "action": "delete_supplier",
+      "entityType": "supplier",
+      "entityId": "sup-1793137150835",
+      "details": "حذف المورد: معلم بطاطس اختباري معدل وحذف كافة سجلاته المالية"
+    },
+    {
+      "id": "aud-1793137150835-c37um9",
+      "timestamp": "2026-10-27T21:39:10.835Z",
+      "action": "create_delivery",
+      "entityType": "supplier",
+      "entityId": "sup-1793137150835",
+      "details": "إضافة مورد جديد: معلم بطاطس اختباري"
+    },
+    {
       "id": "aud-1793056291653-hr7e53",
       "timestamp": "2026-10-26T23:11:31.653Z",
       "action": "create_deduction",

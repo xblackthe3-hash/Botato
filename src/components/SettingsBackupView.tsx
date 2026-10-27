@@ -14,6 +14,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   UserCheck,
+  Pencil,
 } from 'lucide-react';
 
 interface SettingsBackupViewProps {
@@ -21,6 +22,8 @@ interface SettingsBackupViewProps {
   onSuppliersUpdated: () => void;
   activeSupplierId: string;
   setActiveSupplierId: (id: string) => void;
+  onOpenEditSupplier?: (supplier: Supplier) => void;
+  onOpenAddSupplier?: () => void;
 }
 
 export const SettingsBackupView: React.FC<SettingsBackupViewProps> = ({
@@ -28,6 +31,8 @@ export const SettingsBackupView: React.FC<SettingsBackupViewProps> = ({
   onSuppliersUpdated,
   activeSupplierId,
   setActiveSupplierId,
+  onOpenEditSupplier,
+  onOpenAddSupplier,
 }) => {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [showAddSupplierModal, setShowAddSupplierModal] = useState(false);
@@ -192,70 +197,95 @@ export const SettingsBackupView: React.FC<SettingsBackupViewProps> = ({
           <span className="text-xs text-slate-500">{suppliers.length} مورد</span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {suppliers.map((s) => {
-            const isActive = s.id === activeSupplierId;
-            return (
-              <div
-                key={s.id}
-                className={`p-4 rounded-xl border transition-all ${
-                  isActive
-                    ? 'border-amber-400 bg-amber-50/40 shadow-xs ring-2 ring-amber-400/20'
-                    : 'border-slate-200 bg-white hover:bg-slate-50'
-                }`}
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="text-base font-bold text-slate-900">{s.name}</h3>
-                    {s.address && (
-                      <p className="text-xs text-slate-500 mt-0.5">{s.address}</p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    {isActive ? (
-                      <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-600 text-white">
-                        المورد النشط
-                      </span>
-                    ) : (
+        {suppliers.length === 0 ? (
+          <div className="text-center py-8 bg-slate-50 rounded-xl border border-dashed border-slate-300">
+            <Building2 className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+            <p className="text-xs text-slate-600 mb-3 font-semibold">لا يوجد موردين مسجلين حالياً</p>
+            <button
+              onClick={() => onOpenAddSupplier ? onOpenAddSupplier() : setShowAddSupplierModal(true)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors cursor-pointer shadow-xs"
+            >
+              <Plus className="w-4 h-4" />
+              <span>إضافة تاجر جديد الآن</span>
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {suppliers.map((s) => {
+              const isActive = s.id === activeSupplierId;
+              return (
+                <div
+                  key={s.id}
+                  className={`p-4 rounded-xl border transition-all ${
+                    isActive
+                      ? 'border-amber-400 bg-amber-50/40 shadow-xs ring-2 ring-amber-400/20'
+                      : 'border-slate-200 bg-white hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h3 className="text-base font-bold text-slate-900">{s.name}</h3>
+                      {s.address && (
+                        <p className="text-xs text-slate-500 mt-0.5">{s.address}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {isActive ? (
+                        <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-600 text-white">
+                          المورد النشط
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => setActiveSupplierId(s.id)}
+                          className="px-2.5 py-1 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg cursor-pointer"
+                        >
+                          تحديد كنشط
+                        </button>
+                      )}
+
+                      {onOpenEditSupplier && (
+                        <button
+                          onClick={() => onOpenEditSupplier(s)}
+                          className="p-1.5 text-slate-500 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
+                          title="تعديل بيانات المورد"
+                          aria-label={`تعديل بيانات المورد ${s.name}`}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                      )}
+
                       <button
-                        onClick={() => setActiveSupplierId(s.id)}
-                        className="px-2.5 py-1 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg cursor-pointer"
+                        onClick={() => setSupplierToDelete(s)}
+                        className="p-1.5 text-slate-400 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                        title="حذف المورد وسجلاته"
+                        aria-label={`حذف المورد ${s.name}`}
                       >
-                        تحديد كنشط
+                        <Trash2 className="w-4 h-4" />
                       </button>
-                    )}
-
-                    <button
-                      onClick={() => setSupplierToDelete(s)}
-                      className="p-1.5 text-slate-400 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                      title="حذف المورد وسجلاته"
-                      aria-label={`حذف المورد ${s.name}`}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    </div>
                   </div>
+
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-600 pt-3 border-t border-slate-100">
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">الهاتف:</span>
+                      <span className="font-mono">{s.phone || 'غير مسجل'}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">تاريخ بدء التعامل:</span>
+                      <span className="font-mono">{s.startDate}</span>
+                    </div>
+                  </div>
+
+                  {s.notes && (
+                    <p className="mt-2 text-[11px] text-slate-500 italic bg-slate-100/60 p-2 rounded">
+                      {s.notes}
+                    </p>
+                  )}
                 </div>
-
-                <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-600 pt-3 border-t border-slate-100">
-                  <div>
-                    <span className="text-slate-400 block text-[11px]">الهاتف:</span>
-                    <span className="font-mono">{s.phone || 'غير مسجل'}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[11px]">تاريخ بدء التعامل:</span>
-                    <span className="font-mono">{s.startDate}</span>
-                  </div>
-                </div>
-
-                {s.notes && (
-                  <p className="mt-2 text-[11px] text-slate-500 italic bg-slate-100/60 p-2 rounded">
-                    {s.notes}
-                  </p>
-                )}
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Backup & Restore Controls */}

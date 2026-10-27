@@ -1,5 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Supplier, Delivery, Payment, Deduction, DashboardStats, StatementMovement, StatementSummary } from './types/index.ts';
+import {
+  Supplier,
+  Delivery,
+  Payment,
+  Deduction,
+  DashboardStats,
+  StatementMovement,
+  StatementSummary,
+} from './types/index.ts';
 import { api } from './api/client.ts';
 import { Header } from './components/Header.tsx';
 import { DashboardView } from './components/DashboardView.tsx';
@@ -14,7 +22,9 @@ import { RecordDeductionModal } from './components/RecordDeductionModal.tsx';
 import { EditDeliveryModal } from './components/EditDeliveryModal.tsx';
 import { CancelDeliveryModal } from './components/CancelDeliveryModal.tsx';
 import { PrintModal, PrintDocumentType } from './components/PrintModal.tsx';
-import { CheckCircle2, AlertCircle } from 'lucide-react';
+import { SupplierModal } from './components/SupplierModal.tsx';
+import { ManageSuppliersModal } from './components/ManageSuppliersModal.tsx';
+import { CheckCircle2, AlertCircle, Building2, Plus } from 'lucide-react';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<string>('dashboard');
@@ -30,6 +40,16 @@ export default function App() {
   const [recordDeductionOpen, setRecordDeductionOpen] = useState(false);
   const [editingDelivery, setEditingDelivery] = useState<Delivery | null>(null);
   const [cancellingDelivery, setCancellingDelivery] = useState<Delivery | null>(null);
+
+  // Supplier Modals
+  const [supplierModalState, setSupplierModalState] = useState<{
+    isOpen: boolean;
+    supplierToEdit: Supplier | null;
+  }>({
+    isOpen: false,
+    supplierToEdit: null,
+  });
+  const [manageSuppliersOpen, setManageSuppliersOpen] = useState(false);
 
   // Toast
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -72,7 +92,12 @@ export default function App() {
 
   // Refresh all data when activeSupplierId changes or after mutations
   const refreshData = useCallback(async () => {
-    if (!activeSupplierId) return;
+    if (!activeSupplierId) {
+      setDeliveries([]);
+      setPayments([]);
+      setDashboardStats(null);
+      return;
+    }
     try {
       const [dels, pays, stats] = await Promise.all([
         api.getDeliveries(activeSupplierId),
@@ -91,15 +116,57 @@ export default function App() {
     refreshData();
   }, [refreshData]);
 
-  // Handlers
+  // Supplier Handlers
+  const handleOpenAddSupplier = () => {
+    setSupplierModalState({ isOpen: true, supplierToEdit: null });
+  };
+
+  const handleOpenEditSupplier = (supplier: Supplier) => {
+    setSupplierModalState({ isOpen: true, supplierToEdit: supplier });
+  };
+
+  const handleSupplierSaved = (saved: Supplier, isNew: boolean) => {
+    setSuppliers((prev) => {
+      const idx = prev.findIndex((s) => s.id === saved.id);
+      if (idx !== -1) {
+        const next = [...prev];
+        next[idx] = saved;
+        return next;
+      }
+      return [...prev, saved];
+    });
+
+    if (isNew || !activeSupplierId) {
+      setActiveSupplierId(saved.id);
+    }
+
+    showToast(
+      isNew
+        ? `تمت إضافة التاجر (${saved.name}) بنجاح`
+        : `تم تحديث بيانات التاجر (${saved.name}) بنجاح`
+    );
+    refreshData();
+  };
+
+  const handleSupplierDeleted = (deletedId: string) => {
+    setSuppliers((prev) => {
+      const remaining = prev.filter((s) => s.id !== deletedId);
+      if (activeSupplierId === deletedId) {
+        setActiveSupplierId(remaining.length > 0 ? remaining[0].id : '');
+      }
+      return remaining;
+    });
+    showToast('تم حذف التاجر وسجلاته بنجاح');
+    refreshData();
+  };
+
+  // Delivery & Payment Handlers
   const handleDeliveryCreated = async (delivery: Delivery, openPrint: boolean) => {
     showToast(`تم تسجيل التوريدة ${delivery.deliveryNumber} بنجاح`);
     await refreshData();
     if (openPrint) {
-      // Fetch statement to find previous balance before this delivery
       try {
         const stmt = await api.getStatement(delivery.supplierId);
-        // Previous balance before this delivery = current total closing - (delivery total - initial paid)
         const currentBal = stmt.summary.closingBalance;
         const prevBal = currentBal - (delivery.totalAmount - delivery.initialPaid);
         setPrintState({
@@ -144,7 +211,7 @@ export default function App() {
   };
 
   const handleDeliveryUpdated = async (updated: Delivery) => {
-    showToast(`تم تحديث التوريدة ${updated.deliveryNumber}`);
+    showToast(`تم تعديل التوريدة ${updated.deliveryNumber} بنجاح`);
     await refreshData();
   };
 
@@ -223,68 +290,98 @@ export default function App() {
         onOpenNewDelivery={() => setNewDeliveryOpen(true)}
         onOpenNewPayment={() => setRecordPaymentOpen(true)}
         onOpenNewDeduction={() => setRecordDeductionOpen(true)}
+        onOpenManageSuppliers={() => setManageSuppliersOpen(true)}
+        onOpenAddSupplier={handleOpenAddSupplier}
+        onOpenEditSupplier={handleOpenEditSupplier}
       />
 
       {/* Main Content Workspace Viewport */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {currentTab === 'dashboard' && (
-          <DashboardView
-            stats={dashboardStats}
-            supplier={activeSupplier}
-            onNavigate={setCurrentTab}
-            onOpenNewDelivery={() => setNewDeliveryOpen(true)}
-            onOpenNewPayment={() => setRecordPaymentOpen(true)}
-            onOpenNewDeduction={() => setRecordDeductionOpen(true)}
-            onPrintDelivery={handlePrintDelivery}
-            onPrintPayment={handlePrintPayment}
-            onPrintStatement={() => handlePrintStatement('كشف الحساب الإجمالي')}
-          />
-        )}
+        {/* If no suppliers and not on settings or dashboard: show prompt to add supplier */}
+        {suppliers.length === 0 && currentTab !== 'dashboard' && currentTab !== 'settings' ? (
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8 sm:p-12 text-center max-w-xl mx-auto my-8">
+            <div className="w-16 h-16 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto mb-4">
+              <Building2 className="w-8 h-8" />
+            </div>
+            <h2 className="text-xl font-bold text-slate-900 mb-2">لا يوجد تاجر بطاطس مسجل حالياً</h2>
+            <p className="text-xs sm:text-sm text-slate-500 leading-relaxed mb-6">
+              يرجى إضافة بيانات تاجر البطاطس أولاً لتتمكن من استخدام هذا القسم وتسجيل التوريدات بالكيلو والدفعات وتتبع كشف الحساب.
+            </p>
+            <button
+              onClick={handleOpenAddSupplier}
+              className="inline-flex items-center gap-2 px-6 py-3 text-sm font-bold text-white bg-amber-600 hover:bg-amber-700 active:bg-amber-800 rounded-xl transition-all cursor-pointer shadow-md shadow-amber-600/20"
+            >
+              <Plus className="w-5 h-5" />
+              <span>إضافة تاجر بطاطس جديد الآن</span>
+            </button>
+          </div>
+        ) : (
+          <>
+            {currentTab === 'dashboard' && (
+              <DashboardView
+                stats={dashboardStats}
+                supplier={activeSupplier}
+                onNavigate={setCurrentTab}
+                onOpenNewDelivery={() => setNewDeliveryOpen(true)}
+                onOpenNewPayment={() => setRecordPaymentOpen(true)}
+                onOpenNewDeduction={() => setRecordDeductionOpen(true)}
+                onPrintDelivery={handlePrintDelivery}
+                onPrintPayment={handlePrintPayment}
+                onPrintStatement={() => handlePrintStatement('كشف الحساب الإجمالي')}
+                onOpenEditSupplier={handleOpenEditSupplier}
+                onOpenAddSupplier={handleOpenAddSupplier}
+                onOpenManageSuppliers={() => setManageSuppliersOpen(true)}
+              />
+            )}
 
-        {currentTab === 'deliveries' && (
-          <DeliveriesView
-            deliveries={deliveries}
-            onOpenNewDelivery={() => setNewDeliveryOpen(true)}
-            onPrintDelivery={handlePrintDelivery}
-            onEditDelivery={(d) => setEditingDelivery(d)}
-            onCancelDelivery={(d) => setCancellingDelivery(d)}
-          />
-        )}
+            {currentTab === 'deliveries' && (
+              <DeliveriesView
+                deliveries={deliveries}
+                onOpenNewDelivery={() => setNewDeliveryOpen(true)}
+                onPrintDelivery={handlePrintDelivery}
+                onEditDelivery={(d) => setEditingDelivery(d)}
+                onCancelDelivery={(d) => setCancellingDelivery(d)}
+              />
+            )}
 
-        {currentTab === 'payments' && (
-          <PaymentsView
-            payments={payments}
-            onOpenNewPayment={() => setRecordPaymentOpen(true)}
-            onPrintPayment={handlePrintPayment}
-          />
-        )}
+            {currentTab === 'payments' && (
+              <PaymentsView
+                payments={payments}
+                onOpenNewPayment={() => setRecordPaymentOpen(true)}
+                onPrintPayment={handlePrintPayment}
+              />
+            )}
 
-        {currentTab === 'statement' && (
-          <StatementView
-            supplier={activeSupplier}
-            onPrintStatement={handlePrintStatement}
-          />
-        )}
+            {currentTab === 'statement' && (
+              <StatementView
+                supplier={activeSupplier}
+                onPrintStatement={handlePrintStatement}
+              />
+            )}
 
-        {currentTab === 'reports' && (
-          <ReportsView supplier={activeSupplier} />
-        )}
+            {currentTab === 'reports' && (
+              <ReportsView supplier={activeSupplier} />
+            )}
 
-        {currentTab === 'settings' && (
-          <SettingsBackupView
-            suppliers={suppliers}
-            onSuppliersUpdated={() => {
-              api.getSuppliers().then((list) => {
-                setSuppliers(list);
-                if (list.length > 0 && !list.find((s) => s.id === activeSupplierId)) {
-                  setActiveSupplierId(list[0].id);
-                }
-              });
-              refreshData();
-            }}
-            activeSupplierId={activeSupplierId}
-            setActiveSupplierId={setActiveSupplierId}
-          />
+            {currentTab === 'settings' && (
+              <SettingsBackupView
+                suppliers={suppliers}
+                onSuppliersUpdated={() => {
+                  api.getSuppliers().then((list) => {
+                    setSuppliers(list);
+                    if (list.length > 0 && !list.find((s) => s.id === activeSupplierId)) {
+                      setActiveSupplierId(list[0].id);
+                    }
+                  });
+                  refreshData();
+                }}
+                activeSupplierId={activeSupplierId}
+                setActiveSupplierId={setActiveSupplierId}
+                onOpenEditSupplier={handleOpenEditSupplier}
+                onOpenAddSupplier={handleOpenAddSupplier}
+              />
+            )}
+          </>
         )}
       </main>
 
@@ -298,7 +395,7 @@ export default function App() {
         </div>
       </footer>
 
-      {/* Modals */}
+      {/* Delivery & Payment Modals */}
       <NewDeliveryModal
         isOpen={newDeliveryOpen}
         onClose={() => setNewDeliveryOpen(false)}
@@ -335,6 +432,36 @@ export default function App() {
         onDeliveryCancelled={handleDeliveryCancelled}
       />
 
+      {/* Supplier Create / Edit Modal */}
+      <SupplierModal
+        isOpen={supplierModalState.isOpen}
+        supplierToEdit={supplierModalState.supplierToEdit}
+        onClose={() => setSupplierModalState({ isOpen: false, supplierToEdit: null })}
+        onSupplierSaved={handleSupplierSaved}
+      />
+
+      {/* Manage Suppliers Modal */}
+      <ManageSuppliersModal
+        isOpen={manageSuppliersOpen}
+        onClose={() => setManageSuppliersOpen(false)}
+        suppliers={suppliers}
+        activeSupplierId={activeSupplierId}
+        onSetActiveSupplier={(id) => {
+          setActiveSupplierId(id);
+          setManageSuppliersOpen(false);
+        }}
+        onOpenAddSupplier={() => {
+          setManageSuppliersOpen(false);
+          handleOpenAddSupplier();
+        }}
+        onOpenEditSupplier={(sup) => {
+          setManageSuppliersOpen(false);
+          handleOpenEditSupplier(sup);
+        }}
+        onSupplierDeleted={handleSupplierDeleted}
+      />
+
+      {/* Print Receipts & Statements Modal */}
       <PrintModal
         isOpen={printState.isOpen}
         onClose={() => setPrintState((prev) => ({ ...prev, isOpen: false }))}
