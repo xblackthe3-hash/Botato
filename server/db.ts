@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { AppDatabase, Delivery, Payment, Supplier, AuditLog, Deduction } from '../src/types/index.ts';
+import type { AppDatabase, Delivery, Payment, Supplier, AuditLog, Deduction } from '../src/types/index.ts';
 import { round2, calculateDeliveryTotal, calculateDeliveryRemaining, getDeliveryStatus } from '../src/utils/accounting.ts';
 
 const __filename = fileURLToPath(import.meta.url);

@@ -237,3 +237,38 @@ test('deductions reduce supplier debt and document reason correctly', () => {
   assert.equal(summary.closingBalance, 2250);
 });
 
+test('clientDb persists suppliers, deliveries, payments, and deductions without losing data on reload', async () => {
+  const { clientDb } = await import('./clientDb.ts');
+  clientDb.clearAllDataForProduction();
+  assert.equal(clientDb.getSuppliers().length, 0);
+
+  const sup = clientDb.addSupplier({
+    name: 'الحاج محمود',
+    phone: '01012345678',
+    address: 'سوق العبور',
+    startDate: '2026-10-27',
+  });
+  assert.equal(clientDb.getSuppliers().length, 1);
+  assert.equal(clientDb.getSuppliers()[0].name, 'الحاج محمود');
+  assert.equal(clientDb.getActiveSupplierId(), sup.id);
+
+  // Add delivery
+  const del = clientDb.createDelivery({
+    supplierId: sup.id,
+    date: '2026-10-27',
+    weightKg: 200,
+    pricePerKg: 24,
+    initialPaid: 1000,
+    paymentMethod: 'cash',
+  });
+  assert.equal(del.totalAmount, 4800);
+  assert.equal(del.remainingAmount, 3800);
+  assert.equal(clientDb.getDeliveries(sup.id).length, 1);
+
+  // Update supplier name and verify propagation
+  clientDb.updateSupplier(sup.id, { name: 'الحاج محمود البطاطس' });
+  assert.equal(clientDb.getSuppliers()[0].name, 'الحاج محمود البطاطس');
+  assert.equal(clientDb.getDeliveries(sup.id)[0].supplierName, 'الحاج محمود البطاطس');
+});
+
+

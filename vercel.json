@@ -1,12 +1,10 @@
 {
-  "version": 2,
+  "framework": "vite",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "/api"
-    },
-    {
-      "source": "/(.*)",
+      "source": "/((?!assets/|favicon\\.ico|.*\\.(?:css|js|mjs|json|png|jpg|jpeg|svg|ico|woff2?)$).*)",
       "destination": "/index.html"
     }
   ]

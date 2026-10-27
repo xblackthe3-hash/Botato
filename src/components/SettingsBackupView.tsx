@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Supplier, AuditLog, AppDatabase } from '../types/index.ts';
 import { api } from '../api/client.ts';
-import { formatCurrency, formatDateArabic } from '../utils/accounting.ts';
 import {
   Download,
   Upload,
@@ -13,8 +12,8 @@ import {
   History,
   CheckCircle2,
   AlertTriangle,
-  UserCheck,
   Pencil,
+  HardDrive,
 } from 'lucide-react';
 
 interface SettingsBackupViewProps {
@@ -42,26 +41,40 @@ export const SettingsBackupView: React.FC<SettingsBackupViewProps> = ({
   const [newSupNotes, setNewSupNotes] = useState('');
   const [newSupStartDate, setNewSupStartDate] = useState(new Date().toISOString().split('T')[0]);
 
-  // Restore states
+  // Restore & Feedback states
   const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false);
   const [pendingBackupFile, setPendingBackupFile] = useState<AppDatabase | null>(null);
   const [restoreStatus, setRestoreStatus] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
+  const [resetDemoConfirmOpen, setResetDemoConfirmOpen] = useState(false);
 
   // Supplier deletion state
   const [supplierToDelete, setSupplierToDelete] = useState<Supplier | null>(null);
   const [deletingSupplier, setDeletingSupplier] = useState(false);
 
+  const showSuccess = (msg: string) => {
+    setErrorMessage(null);
+    setRestoreStatus(msg);
+  };
+
+  const showError = (msg: string) => {
+    setRestoreStatus(null);
+    setErrorMessage(msg);
+  };
+
   const confirmDeleteSupplier = async () => {
     if (!supplierToDelete) return;
     setDeletingSupplier(true);
     try {
+      const deletedName = supplierToDelete.name;
       await api.deleteSupplier(supplierToDelete.id);
       setSupplierToDelete(null);
       onSuppliersUpdated();
       api.getAuditLogs().then(setAuditLogs);
+      showSuccess(`تم حذف المورد (${deletedName}) وكافة سجلاته بنجاح.`);
     } catch (err: any) {
-      alert(err.message || 'فشل في حذف المورد');
+      showError(err.message || 'فشل في حذف المورد');
     } finally {
       setDeletingSupplier(false);
     }
@@ -73,6 +86,7 @@ export const SettingsBackupView: React.FC<SettingsBackupViewProps> = ({
 
   const handleDownloadBackup = () => {
     api.downloadLocalBackup();
+    showSuccess('تم تجهيز وتحميل ملف النسخة الاحتياطية (JSON) بنجاح.');
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -84,13 +98,13 @@ export const SettingsBackupView: React.FC<SettingsBackupViewProps> = ({
       try {
         const json = JSON.parse(event.target?.result as string);
         if (!json.suppliers || !json.deliveries) {
-          alert('ملف النسخة الاحتياطية غير صالح أو تنقصه الجداول الأساسية.');
+          showError('ملف النسخة الاحتياطية غير صالح أو تنقصه الجداول الأساسية.');
           return;
         }
         setPendingBackupFile(json);
         setRestoreConfirmOpen(true);
       } catch (err) {
-        alert('حدث خطأ في قراءة ملف JSON.');
+        showError('حدث خطأ في قراءة ملف JSON.');
       }
     };
     reader.readAsText(file);
@@ -101,25 +115,25 @@ export const SettingsBackupView: React.FC<SettingsBackupViewProps> = ({
     if (!pendingBackupFile) return;
     try {
       const res = await api.restoreBackup(pendingBackupFile);
-      setRestoreStatus(res.message);
+      showSuccess(res.message);
       setRestoreConfirmOpen(false);
       setPendingBackupFile(null);
       onSuppliersUpdated();
       api.getAuditLogs().then(setAuditLogs);
     } catch (err: any) {
-      alert(err.message || 'فشلت عملية الاستعادة.');
+      showError(err.message || 'فشلت عملية الاستعادة.');
     }
   };
 
   const handleResetDemo = async () => {
-    if (!confirm('هل تريد بالتأكيد إعادة تعيين البيانات التجريبية لمطعم الشامي؟')) return;
     try {
       await api.resetDemoData();
-      alert('تمت إعادة تعيين البيانات التجريبية بنجاح.');
+      setResetDemoConfirmOpen(false);
+      showSuccess('تمت إعادة تعيين البيانات التجريبية بنجاح.');
       onSuppliersUpdated();
       api.getAuditLogs().then(setAuditLogs);
     } catch (err: any) {
-      alert(err.message);
+      showError(err.message);
     }
   };
 
@@ -127,11 +141,11 @@ export const SettingsBackupView: React.FC<SettingsBackupViewProps> = ({
     try {
       await api.clearDataForProduction();
       setClearConfirmOpen(false);
-      alert('تم مسح البيانات التجريبية بنجاح وبدء الحساب الفعلي النظيف.');
+      showSuccess('تم تصفير الدفتر ومسح كافة البيانات بنجاح. يمكنك الآن إضافة الموردين الجدد.');
       onSuppliersUpdated();
       api.getAuditLogs().then(setAuditLogs);
     } catch (err: any) {
-      alert(err.message);
+      showError(err.message);
     }
   };
 
@@ -155,8 +169,9 @@ export const SettingsBackupView: React.FC<SettingsBackupViewProps> = ({
       setNewSupNotes('');
       onSuppliersUpdated();
       setActiveSupplierId(created.id);
+      showSuccess(`تمت إضافة التاجر (${created.name}) وحفظه في قاعدة البيانات المحلية بنجاح.`);
     } catch (err: any) {
-      alert(err.message);
+      showError(err.message);
     }
   };
 
@@ -165,14 +180,20 @@ export const SettingsBackupView: React.FC<SettingsBackupViewProps> = ({
       {/* Top Banner */}
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">إدارة الموردين والنسخ الاحتياطي والتدقيق</h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            حفظ البيانات محلياً وسحابياً، استيراد وتصدير النسخ، وإدارة حسابات تجار البطاطس
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-xl font-bold text-slate-900">إدارة الموردين والنسخ الاحتياطي والتدقيق</h1>
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <HardDrive className="w-3.5 h-3.5" />
+              <span>قاعدة بيانات أوفلاين نشطة (LocalStorage + IndexedDB)</span>
+            </span>
+          </div>
+          <p className="text-xs text-slate-500 mt-1">
+            حفظ تلقائي فوري ودائم على جهازك بدون الحاجة للإنترنت — لا تُفقد البيانات أبداً عند تحديث الصفحة
           </p>
         </div>
 
         <button
-          onClick={() => setShowAddSupplierModal(true)}
+          onClick={() => onOpenAddSupplier ? onOpenAddSupplier() : setShowAddSupplierModal(true)}
           className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-lg cursor-pointer transition-colors shadow-xs"
         >
           <Plus className="w-4 h-4" />
@@ -181,9 +202,32 @@ export const SettingsBackupView: React.FC<SettingsBackupViewProps> = ({
       </div>
 
       {restoreStatus && (
-        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4" />
-          <span>{restoreStatus}</span>
+        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>{restoreStatus}</span>
+          </div>
+          <button
+            onClick={() => setRestoreStatus(null)}
+            className="text-emerald-700 hover:text-emerald-900 font-bold px-2 cursor-pointer"
+          >
+            إغلاق
+          </button>
+        </div>
+      )}
+
+      {errorMessage && (
+        <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+          <button
+            onClick={() => setErrorMessage(null)}
+            className="text-rose-700 hover:text-rose-900 font-bold px-2 cursor-pointer"
+          >
+            إغلاق
+          </button>
         </div>
       )}
 
@@ -342,7 +386,7 @@ export const SettingsBackupView: React.FC<SettingsBackupViewProps> = ({
 
         <div className="flex flex-wrap items-center gap-3">
           <button
-            onClick={handleResetDemo}
+            onClick={() => setResetDemoConfirmOpen(true)}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg cursor-pointer transition-colors"
           >
             <RefreshCw className="w-3.5 h-3.5" />
@@ -510,6 +554,40 @@ export const SettingsBackupView: React.FC<SettingsBackupViewProps> = ({
         </div>
       )}
 
+      {/* Reset Demo Confirmation Modal */}
+      {resetDemoConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden border border-slate-200 p-6 space-y-4">
+            <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center mx-auto">
+              <RefreshCw className="w-6 h-6" />
+            </div>
+            <h3 className="text-base font-bold text-center text-slate-900">
+              إعادة تعيين البيانات التجريبية
+            </h3>
+            <p className="text-xs text-slate-600 text-center leading-relaxed">
+              هل تريد بالتأكيد تحميل بيانات تجريبية لمطعم الشامي؟ سيتم استبدال السجلات الحالية بالبيانات التجريبية.
+            </p>
+
+            <div className="flex justify-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setResetDemoConfirmOpen(false)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-semibold text-slate-700 cursor-pointer"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={handleResetDemo}
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold cursor-pointer"
+              >
+                تأكيد تحميل البيانات التجريبية
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Clear for Production Modal */}
       {clearConfirmOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
@@ -518,10 +596,10 @@ export const SettingsBackupView: React.FC<SettingsBackupViewProps> = ({
               <Trash2 className="w-6 h-6" />
             </div>
             <h3 className="text-base font-bold text-center text-slate-900">
-              بدء الاستخدام الفعلي ومسح البيانات التجريبية
+              تصفير الدفتر وبدء الاستخدام الفعلي النظيف
             </h3>
             <p className="text-xs text-slate-600 text-center leading-relaxed">
-              هل أنت متأكد من مسح جميع التوريدات والدفعات التجريبية وبدء دفتر محاسبة جديد ونظيف لمطعم الشامي؟
+              هل أنت متأكد من مسح كافة الموردين والتوريدات والدفعات وبدء دفتر محاسبة جديد ونظيف تماماً لمطعم الشامي؟
             </p>
 
             <div className="flex justify-center gap-3 pt-2">
@@ -537,7 +615,7 @@ export const SettingsBackupView: React.FC<SettingsBackupViewProps> = ({
                 onClick={handleClearProduction}
                 className="px-4 py-2 bg-rose-700 hover:bg-rose-800 text-white rounded-lg text-xs font-bold cursor-pointer"
               >
-                تأكيد البدء النظيف
+                تأكيد التصفير الكامل
               </button>
             </div>
           </div>

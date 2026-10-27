@@ -26,13 +26,20 @@ import { SupplierModal } from './components/SupplierModal.tsx';
 import { ManageSuppliersModal } from './components/ManageSuppliersModal.tsx';
 import { CheckCircle2, AlertCircle, Building2, Plus } from 'lucide-react';
 
+import { clientDb } from './utils/clientDb.ts';
+
 export default function App() {
   const [currentTab, setCurrentTab] = useState<string>('dashboard');
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [activeSupplierId, setActiveSupplierId] = useState<string>('');
+  const [suppliers, setSuppliers] = useState<Supplier[]>(() => clientDb.getSuppliers());
+  const [activeSupplierId, setActiveSupplierIdState] = useState<string>(() => clientDb.getActiveSupplierId());
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
+
+  const setActiveSupplierId = useCallback((id: string) => {
+    setActiveSupplierIdState(id);
+    api.setActiveSupplierId(id);
+  }, []);
 
   // Modals
   const [newDeliveryOpen, setNewDeliveryOpen] = useState(false);
@@ -77,26 +84,10 @@ export default function App() {
     documentType: 'delivery',
   });
 
-  // Initial load of suppliers
-  useEffect(() => {
-    api
-      .getSuppliers()
-      .then((list) => {
-        setSuppliers(list);
-        if (list.length > 0) {
-          if (!activeSupplierId || !list.some((s) => s.id === activeSupplierId)) {
-            setActiveSupplierId(list[0].id);
-          }
-        } else {
-          setActiveSupplierId('');
-        }
-      })
-      .catch((err) => console.error('Failed to load suppliers:', err));
-  }, [activeSupplierId]);
-
   // Refresh all data when activeSupplierId changes or after mutations
-  const refreshData = useCallback(async () => {
-    if (!activeSupplierId) {
+  const refreshData = useCallback(async (overrideSupplierId?: string) => {
+    const targetId = overrideSupplierId !== undefined ? overrideSupplierId : activeSupplierId;
+    if (!targetId) {
       setDeliveries([]);
       setPayments([]);
       setDashboardStats(null);
@@ -104,9 +95,9 @@ export default function App() {
     }
     try {
       const [dels, pays, stats] = await Promise.all([
-        api.getDeliveries(activeSupplierId),
-        api.getPayments(activeSupplierId),
-        api.getDashboard(activeSupplierId),
+        api.getDeliveries(targetId),
+        api.getPayments(targetId),
+        api.getDashboard(targetId),
       ]);
       setDeliveries(dels);
       setPayments(pays);
@@ -115,6 +106,26 @@ export default function App() {
       console.error('Failed to refresh data:', err);
     }
   }, [activeSupplierId]);
+
+  // Initial load & IndexedDB recovery check
+  useEffect(() => {
+    api
+      .recoverIfNeeded()
+      .then(() => {
+        const list = clientDb.getSuppliers();
+        setSuppliers(list);
+        const savedId = clientDb.getActiveSupplierId();
+        if (list.length > 0) {
+          const validId = savedId && list.some((s) => s.id === savedId) ? savedId : list[0].id;
+          setActiveSupplierId(validId);
+          refreshData(validId);
+        } else {
+          setActiveSupplierId('');
+          refreshData('');
+        }
+      })
+      .catch((err) => console.error('Failed to initialize offline DB:', err));
+  }, []);
 
   useEffect(() => {
     refreshData();
@@ -130,38 +141,32 @@ export default function App() {
   };
 
   const handleSupplierSaved = (saved: Supplier, isNew: boolean) => {
-    setSuppliers((prev) => {
-      const idx = prev.findIndex((s) => s.id === saved.id);
-      if (idx !== -1) {
-        const next = [...prev];
-        next[idx] = saved;
-        return next;
-      }
-      return [...prev, saved];
-    });
+    const updatedList = clientDb.getSuppliers();
+    setSuppliers(updatedList);
 
-    if (isNew || !activeSupplierId) {
-      setActiveSupplierId(saved.id);
-    }
+    const nextActiveId = isNew || !activeSupplierId ? saved.id : activeSupplierId;
+    setActiveSupplierId(nextActiveId);
 
     showToast(
       isNew
-        ? `تمت إضافة التاجر (${saved.name}) بنجاح`
+        ? `تمت إضافة التاجر (${saved.name}) وحفظه محلياً بنجاح`
         : `تم تحديث بيانات التاجر (${saved.name}) بنجاح`
     );
-    refreshData();
+    refreshData(nextActiveId);
   };
 
   const handleSupplierDeleted = (deletedId: string) => {
-    setSuppliers((prev) => {
-      const remaining = prev.filter((s) => s.id !== deletedId);
-      if (activeSupplierId === deletedId) {
-        setActiveSupplierId(remaining.length > 0 ? remaining[0].id : '');
-      }
-      return remaining;
-    });
+    const remaining = clientDb.getSuppliers();
+    setSuppliers(remaining);
+    const nextActiveId =
+      activeSupplierId === deletedId
+        ? remaining.length > 0
+          ? remaining[0].id
+          : ''
+        : activeSupplierId;
+    setActiveSupplierId(nextActiveId);
     showToast('تم حذف التاجر وسجلاته بنجاح');
-    refreshData();
+    refreshData(nextActiveId);
   };
 
   // Delivery & Payment Handlers
@@ -371,12 +376,13 @@ export default function App() {
               <SettingsBackupView
                 suppliers={suppliers}
                 onSuppliersUpdated={() => {
-                  api.getSuppliers().then((list) => {
-                    setSuppliers(list);
-                    if (list.length > 0 && !list.find((s) => s.id === activeSupplierId)) {
-                      setActiveSupplierId(list[0].id);
-                    }
-                  });
+                  const list = clientDb.getSuppliers();
+                  setSuppliers(list);
+                  if (list.length > 0 && !list.find((s) => s.id === activeSupplierId)) {
+                    setActiveSupplierId(list[0].id);
+                  } else if (list.length === 0) {
+                    setActiveSupplierId('');
+                  }
                   refreshData();
                 }}
                 activeSupplierId={activeSupplierId}

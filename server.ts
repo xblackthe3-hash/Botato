@@ -396,8 +396,13 @@ app.post('/api/clear-demo', (_req, res) => {
 });
 
 // --- VITE & STATIC SERVING ---
-const isProd = process.env.NODE_ENV === 'production';
+const isProd =
+  process.env.NODE_ENV === 'production' ||
+  process.env.npm_lifecycle_event === 'start' ||
+  Boolean(process.env.K_SERVICE);
 const isVercel = !!process.env.VERCEL;
+const distPath = path.resolve(__dirname, 'dist');
+
 if (!isProd && !isVercel) {
   const { createServer: createViteServer } = await import('vite');
   const vite = await createViteServer({
@@ -405,14 +410,25 @@ if (!isProd && !isVercel) {
     appType: 'spa',
   });
   app.use(vite.middlewares);
-} else {
-  const distPath = path.resolve(__dirname, 'dist');
-  if (fs.existsSync(distPath)) {
-    app.use(express.static(distPath));
-    app.get('*', (_req, res) => {
-      res.sendFile(path.resolve(distPath, 'index.html'));
-    });
-  }
+} else if (fs.existsSync(distPath)) {
+  app.use(
+    express.static(distPath, {
+      index: false,
+      maxAge: '1y',
+      immutable: true,
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.css')) {
+          res.setHeader('Content-Type', 'text/css; charset=utf-8');
+        } else if (filePath.endsWith('.js')) {
+          res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+        }
+      },
+    })
+  );
+  app.get('*', (_req, res) => {
+    res.setHeader('Cache-Control', 'no-cache');
+    res.sendFile(path.resolve(distPath, 'index.html'));
+  });
 }
 
 if (!isVercel) {

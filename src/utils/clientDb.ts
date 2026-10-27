@@ -8,7 +8,69 @@ import {
   calculateWeightedAveragePrice,
 } from './accounting.ts';
 
-const STORAGE_KEY = 'al_shami_potato_accounting_v4';
+const STORAGE_KEY = 'al_shami_potato_offline_db_v5';
+const LEGACY_V4_KEY = 'al_shami_potato_accounting_v4';
+const ACTIVE_SUPPLIER_KEY = 'al_shami_active_supplier_id_v5';
+const IDB_NAME = 'AlShamiPotatoOfflineDB';
+const IDB_STORE = 'kv_store';
+const IDB_KEY = 'main_database';
+
+function saveToIndexedDB(data: AppDatabase): void {
+  if (typeof window === 'undefined' || !('indexedDB' in window)) return;
+  try {
+    const req = window.indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(IDB_STORE)) {
+        db.createObjectStore(IDB_STORE);
+      }
+    };
+    req.onsuccess = () => {
+      try {
+        const db = req.result;
+        const tx = db.transaction(IDB_STORE, 'readwrite');
+        tx.objectStore(IDB_STORE).put(data, IDB_KEY);
+      } catch {
+        // ignore IDB write error
+      }
+    };
+  } catch {
+    // ignore IDB open error
+  }
+}
+
+function loadFromIndexedDB(): Promise<AppDatabase | null> {
+  if (typeof window === 'undefined' || !('indexedDB' in window)) {
+    return Promise.resolve(null);
+  }
+  return new Promise((resolve) => {
+    try {
+      const req = window.indexedDB.open(IDB_NAME, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(IDB_STORE)) {
+          db.createObjectStore(IDB_STORE);
+        }
+      };
+      req.onsuccess = () => {
+        try {
+          const db = req.result;
+          const tx = db.transaction(IDB_STORE, 'readonly');
+          const getReq = tx.objectStore(IDB_STORE).get(IDB_KEY);
+          getReq.onsuccess = () => {
+            resolve(getReq.result || null);
+          };
+          getReq.onerror = () => resolve(null);
+        } catch {
+          resolve(null);
+        }
+      };
+      req.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+}
 
 export function getDefaultClientDatabase(): AppDatabase {
   return {
@@ -115,41 +177,75 @@ export function getSampleDemoClientDatabase(): AppDatabase {
   };
 }
 
+function normalizeDb(parsed: any): AppDatabase | null {
+  if (!parsed || !Array.isArray(parsed.suppliers) || !Array.isArray(parsed.deliveries)) {
+    return null;
+  }
+  return {
+    suppliers: parsed.suppliers,
+    deliveries: parsed.deliveries,
+    payments: Array.isArray(parsed.payments) ? parsed.payments : [],
+    deductions: Array.isArray(parsed.deductions) ? parsed.deductions : [],
+    auditLogs: Array.isArray(parsed.auditLogs) ? parsed.auditLogs : [],
+    nextDeliverySeq: Number(parsed.nextDeliverySeq) || 1001,
+    nextPaymentSeq: Number(parsed.nextPaymentSeq) || 1001,
+    nextDeductionSeq: Number(parsed.nextDeductionSeq) || 1001,
+  };
+}
+
 class ClientDatabaseManager {
   private memoryDb: AppDatabase | null = null;
+
+  constructor() {
+    if (typeof window !== 'undefined') {
+      window.addEventListener('storage', (e) => {
+        if (e.key === STORAGE_KEY && e.newValue) {
+          try {
+            const parsed = normalizeDb(JSON.parse(e.newValue));
+            if (parsed) {
+              this.memoryDb = parsed;
+            }
+          } catch {
+            // ignore
+          }
+        }
+      });
+    }
+  }
 
   private isBrowser(): boolean {
     return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
   }
 
   private load(): AppDatabase {
-    if (this.memoryDb) return this.memoryDb;
-
     if (this.isBrowser()) {
       try {
-        // Clear previous version keys that might contain old demo data
-        ['al_shami_potato_accounting_v1', 'al_shami_potato_accounting_v2', 'al_shami_potato_accounting_v3'].forEach(
-          (k) => window.localStorage.removeItem(k)
-        );
-
+        // 1. Read from primary v5 storage key
         const stored = window.localStorage.getItem(STORAGE_KEY);
         if (stored) {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed.suppliers) && Array.isArray(parsed.deliveries)) {
-            if (!parsed.payments) parsed.payments = [];
-            if (!parsed.deductions) parsed.deductions = [];
-            if (!parsed.auditLogs) parsed.auditLogs = [];
-            if (!parsed.nextDeliverySeq) parsed.nextDeliverySeq = 1001;
-            if (!parsed.nextPaymentSeq) parsed.nextPaymentSeq = 1001;
-            if (!parsed.nextDeductionSeq) parsed.nextDeductionSeq = 1001;
-            this.memoryDb = parsed;
-            return parsed;
+          const normalized = normalizeDb(JSON.parse(stored));
+          if (normalized) {
+            this.memoryDb = normalized;
+            return normalized;
+          }
+        }
+
+        // 2. Migrate from v4 if user already added suppliers there
+        const v4Stored = window.localStorage.getItem(LEGACY_V4_KEY);
+        if (v4Stored) {
+          const normalizedV4 = normalizeDb(JSON.parse(v4Stored));
+          if (normalizedV4 && normalizedV4.suppliers.length > 0) {
+            this.memoryDb = normalizedV4;
+            this.save(normalizedV4);
+            return normalizedV4;
           }
         }
       } catch (e) {
-        console.warn('Could not read from localStorage, using defaults:', e);
+        console.warn('Could not read from localStorage, using memory/defaults:', e);
       }
     }
+
+    if (this.memoryDb) return this.memoryDb;
 
     const initial = getDefaultClientDatabase();
     this.memoryDb = initial;
@@ -165,10 +261,55 @@ class ClientDatabaseManager {
       } catch (e) {
         console.warn('Could not save to localStorage:', e);
       }
+      saveToIndexedDB(data);
     }
   }
 
-  // Sync external database state (e.g. from server) into local storage
+  async recoverFromIndexedDB(): Promise<boolean> {
+    if (!this.isBrowser()) return false;
+    const current = this.load();
+    if (current.suppliers.length > 0 || current.deliveries.length > 0) {
+      // Ensure IndexedDB is also up to date with current localStorage
+      saveToIndexedDB(current);
+      return false;
+    }
+    const idbData = await loadFromIndexedDB();
+    const normalized = normalizeDb(idbData);
+    if (normalized && (normalized.suppliers.length > 0 || normalized.deliveries.length > 0)) {
+      this.save(normalized);
+      return true;
+    }
+    return false;
+  }
+
+  getActiveSupplierId(): string {
+    if (!this.isBrowser()) return this.load().suppliers[0]?.id || '';
+    try {
+      const saved = window.localStorage.getItem(ACTIVE_SUPPLIER_KEY);
+      const suppliers = this.getSuppliers();
+      if (saved && suppliers.some((s) => s.id === saved)) {
+        return saved;
+      }
+      return suppliers[0]?.id || '';
+    } catch {
+      return this.getSuppliers()[0]?.id || '';
+    }
+  }
+
+  setActiveSupplierId(id: string): void {
+    if (!this.isBrowser()) return;
+    try {
+      if (id) {
+        window.localStorage.setItem(ACTIVE_SUPPLIER_KEY, id);
+      } else {
+        window.localStorage.removeItem(ACTIVE_SUPPLIER_KEY);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // Sync external database state ONLY when explicitly restoring
   syncFromRemote(remoteDb: Partial<AppDatabase>) {
     const current = this.load();
     const merged: AppDatabase = {
@@ -194,7 +335,20 @@ class ClientDatabaseManager {
 
   addSupplier(data: Partial<Supplier>): Supplier {
     const db = this.load();
-    const id = `sup-${Date.now()}`;
+    if (data.id) {
+      const existingIdx = db.suppliers.findIndex((s) => s.id === data.id);
+      if (existingIdx !== -1) {
+        db.suppliers[existingIdx] = {
+          ...db.suppliers[existingIdx],
+          ...data,
+          updatedAt: new Date().toISOString(),
+        };
+        this.save(db);
+        return db.suppliers[existingIdx];
+      }
+    }
+
+    const id = data.id || `sup-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     const now = new Date().toISOString();
     const newSup: Supplier = {
       id,
@@ -203,11 +357,12 @@ class ClientDatabaseManager {
       address: data.address || '',
       notes: data.notes || '',
       startDate: data.startDate || new Date().toISOString().split('T')[0],
-      createdAt: now,
+      createdAt: data.createdAt || now,
       updatedAt: now,
     };
     db.suppliers.push(newSup);
-    this.addAuditLog('create_delivery', 'supplier', id, `إضافة مورد جديد: ${newSup.name}`);
+    this.setActiveSupplierId(newSup.id);
+    this.addAuditLog('create_delivery', 'supplier', id, `إضافة مورد جديد: ${newSup.name}`, db);
     this.save(db);
     return newSup;
   }
@@ -216,11 +371,25 @@ class ClientDatabaseManager {
     const db = this.load();
     const idx = db.suppliers.findIndex((s) => s.id === id);
     if (idx === -1) return null;
+    const updatedName = data.name?.trim() || db.suppliers[idx].name;
     db.suppliers[idx] = {
       ...db.suppliers[idx],
       ...data,
+      name: updatedName,
       updatedAt: new Date().toISOString(),
     };
+
+    // Update cached supplierName across deliveries, payments, and deductions
+    db.deliveries.forEach((d) => {
+      if (d.supplierId === id) d.supplierName = updatedName;
+    });
+    db.payments.forEach((p) => {
+      if (p.supplierId === id) p.supplierName = updatedName;
+    });
+    (db.deductions || []).forEach((ded) => {
+      if (ded.supplierId === id) ded.supplierName = updatedName;
+    });
+
     this.save(db);
     return db.suppliers[idx];
   }
@@ -237,7 +406,11 @@ class ClientDatabaseManager {
     db.payments = db.payments.filter((p) => p.supplierId !== id);
     db.deductions = (db.deductions || []).filter((ded) => ded.supplierId !== id);
 
-    this.addAuditLog('delete_supplier', 'supplier', id, `حذف المورد: ${supName} وحذف كافة سجلاته المالية`);
+    if (this.getActiveSupplierId() === id) {
+      this.setActiveSupplierId(db.suppliers[0]?.id || '');
+    }
+
+    this.addAuditLog('delete_supplier', 'supplier', id, `حذف المورد: ${supName} وحذف كافة سجلاته المالية`, db);
     this.save(db);
     return { success: true, message: `تم حذف المورد ${supName} بنجاح` };
   }
@@ -265,7 +438,7 @@ class ClientDatabaseManager {
     notes?: string;
   }): Deduction {
     const db = this.load();
-    const supplier = this.getSupplierById(data.supplierId);
+    const supplier = db.suppliers.find((s) => s.id === data.supplierId);
     if (!supplier) {
       throw new Error('يرجى اختيار المورد أولاً أو تسجيل مورد جديد');
     }
@@ -296,7 +469,8 @@ class ClientDatabaseManager {
       'create_deduction',
       'deduction',
       id,
-      `تسجيل خصم مالي ${deductionNumber} بمبلغ ${amount} ج.م من حساب ${supplier.name} - السبب: ${data.reason}`
+      `تسجيل خصم مالي ${deductionNumber} بمبلغ ${amount} ج.م من حساب ${supplier.name} - السبب: ${data.reason}`,
+      db
     );
     this.save(db);
     return newDeduction;
@@ -327,7 +501,7 @@ class ClientDatabaseManager {
     notes?: string;
   }): Delivery {
     const db = this.load();
-    const supplier = this.getSupplierById(data.supplierId);
+    const supplier = db.suppliers.find((s) => s.id === data.supplierId);
     if (!supplier) {
       throw new Error('يرجى اختيار المورد أولاً أو تسجيل مورد جديد');
     }
@@ -370,7 +544,8 @@ class ClientDatabaseManager {
       'create_delivery',
       'delivery',
       id,
-      `تسجيل توريدة ${deliveryNumber} بوزن ${weightKg} كجم بسعر ${pricePerKg} ج.م (إجمالي: ${totalAmount} ج.م، مدفوع: ${initialPaid} ج.م)`
+      `تسجيل توريدة ${deliveryNumber} بوزن ${weightKg} كجم بسعر ${pricePerKg} ج.م (إجمالي: ${totalAmount} ج.م، مدفوع: ${initialPaid} ج.م)`,
+      db
     );
     this.save(db);
     return newDelivery;
@@ -417,7 +592,8 @@ class ClientDatabaseManager {
       'update_delivery',
       'delivery',
       id,
-      `تعديل توريدة ${current.deliveryNumber}: وزن ${weightKg} كجم، سعر ${pricePerKg} ج.م، إجمالي جديد ${totalAmount} ج.م`
+      `تعديل توريدة ${current.deliveryNumber}: وزن ${weightKg} كجم، سعر ${pricePerKg} ج.م، إجمالي جديد ${totalAmount} ج.م`,
+      db
     );
     this.save(db);
     return updated;
@@ -437,7 +613,7 @@ class ClientDatabaseManager {
     };
 
     db.deliveries[idx] = updated;
-    this.addAuditLog('cancel_delivery', 'delivery', id, `إلغاء التوريدة ${current.deliveryNumber} بسبب: ${reason}`);
+    this.addAuditLog('cancel_delivery', 'delivery', id, `إلغاء التوريدة ${current.deliveryNumber} بسبب: ${reason}`, db);
     this.save(db);
     return updated;
   }
@@ -474,7 +650,7 @@ class ClientDatabaseManager {
       }
     }
 
-    const supplier = this.getSupplierById(data.supplierId);
+    const supplier = db.suppliers.find((s) => s.id === data.supplierId);
     if (!supplier) {
       throw new Error('يرجى اختيار المورد أولاً أو تسجيل مورد جديد');
     }
@@ -506,7 +682,8 @@ class ClientDatabaseManager {
       'create_payment',
       'payment',
       id,
-      `تسجيل دفعة مالية ${paymentNumber} بمبلغ ${amount} ج.م طريقة (${data.paymentMethod === 'vodafone_cash' ? 'فودافون كاش' : 'نقدي'}) للمورد ${supplier.name}`
+      `تسجيل دفعة مالية ${paymentNumber} بمبلغ ${amount} ج.م طريقة (${data.paymentMethod === 'vodafone_cash' ? 'فودافون كاش' : 'نقدي'}) للمورد ${supplier.name}`,
+      db
     );
     this.save(db);
     return { payment: newPayment, isDuplicate: false };
@@ -520,11 +697,12 @@ class ClientDatabaseManager {
     action: AuditLog['action'],
     entityType: AuditLog['entityType'],
     entityId: string,
-    details: string
+    details: string,
+    targetDb?: AppDatabase
   ) {
-    const db = this.load();
+    const db = targetDb || this.load();
     const log: AuditLog = {
-      id: `aud-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+      id: `aud-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       timestamp: new Date().toISOString(),
       action,
       entityType,
@@ -534,6 +712,9 @@ class ClientDatabaseManager {
     db.auditLogs.unshift(log);
     if (db.auditLogs.length > 500) {
       db.auditLogs = db.auditLogs.slice(0, 500);
+    }
+    if (!targetDb) {
+      this.save(db);
     }
   }
 
@@ -555,14 +736,22 @@ class ClientDatabaseManager {
       nextPaymentSeq: backupData.nextPaymentSeq || 1001,
       nextDeductionSeq: backupData.nextDeductionSeq || 1001,
     };
+    this.addAuditLog('restore_backup', 'backup', 'restore', 'تمت استعادة نسخة احتياطية بنجاح.', cleanDb);
     this.save(cleanDb);
-    this.addAuditLog('restore_backup', 'backup', 'restore', 'تمت استعادة نسخة احتياطية بنجاح.');
+    if (cleanDb.suppliers.length > 0) {
+      this.setActiveSupplierId(cleanDb.suppliers[0].id);
+    } else {
+      this.setActiveSupplierId('');
+    }
     return { success: true, message: 'تمت استعادة البيانات بنجاح.' };
   }
 
   resetToDemoData() {
     const initial = getSampleDemoClientDatabase();
     this.save(initial);
+    if (initial.suppliers.length > 0) {
+      this.setActiveSupplierId(initial.suppliers[0].id);
+    }
   }
 
   clearAllDataForProduction() {
@@ -585,6 +774,7 @@ class ClientDatabaseManager {
       nextPaymentSeq: 1001,
       nextDeductionSeq: 1001,
     };
+    this.setActiveSupplierId('');
     this.save(emptyDb);
   }
 }
