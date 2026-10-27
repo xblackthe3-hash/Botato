@@ -11,7 +11,20 @@ const DATA_DIR = isVercel ? '/tmp' : path.resolve(__dirname, '../data');
 const DB_FILE = path.resolve(DATA_DIR, 'database.json');
 const BUNDLED_DB_FILE = path.resolve(__dirname, '../data/database.json');
 
-function getDefaultDatabase(): AppDatabase {
+export function getDefaultDatabase(): AppDatabase {
+  return {
+    suppliers: [],
+    deliveries: [],
+    payments: [],
+    deductions: [],
+    auditLogs: [],
+    nextDeliverySeq: 1001,
+    nextPaymentSeq: 1001,
+    nextDeductionSeq: 1001,
+  };
+}
+
+export function getSampleDemoDatabase(): AppDatabase {
   const defaultSupplier: Supplier = {
     id: 'sup-1',
     name: 'الحاج رضوان - مورد بطاطس الشامي',
@@ -108,30 +121,6 @@ function getDefaultDatabase(): AppDatabase {
       entityId: 'del-1',
       details: 'تسجيل توريدة رقم DEL-1001 بوزن 100 كجم وقيمة 2400 ج.م',
     },
-    {
-      id: 'aud-2',
-      timestamp: new Date('2026-10-25T08:00:00Z').toISOString(),
-      action: 'create_delivery',
-      entityType: 'delivery',
-      entityId: 'del-2',
-      details: 'تسجيل توريدة رقم DEL-1002 بوزن 150 كجم وقيمة 3750 ج.م ومدفوع 2000 ج.م',
-    },
-    {
-      id: 'aud-3',
-      timestamp: new Date('2026-10-26T09:15:00Z').toISOString(),
-      action: 'create_delivery',
-      entityType: 'delivery',
-      entityId: 'del-3',
-      details: 'تسجيل توريدة رقم DEL-1003 بوزن 200 كجم وقيمة 4700 ج.م ومدفوع 3000 ج.م',
-    },
-    {
-      id: 'aud-4',
-      timestamp: new Date('2026-10-26T13:00:00Z').toISOString(),
-      action: 'create_payment',
-      entityType: 'payment',
-      entityId: 'pay-1',
-      details: 'تسجيل دفعة رقم PAY-1001 بمبلغ 1000 ج.م فودافون كاش',
-    },
   ];
 
   return {
@@ -171,8 +160,12 @@ class DatabaseManager {
       if (targetFile) {
         const raw = fs.readFileSync(targetFile, 'utf-8');
         const parsed = JSON.parse(raw);
-        if (parsed.suppliers && parsed.deliveries && parsed.payments) {
+        if (Array.isArray(parsed.suppliers) && Array.isArray(parsed.deliveries)) {
+          if (!parsed.payments) parsed.payments = [];
           if (!parsed.deductions) parsed.deductions = [];
+          if (!parsed.auditLogs) parsed.auditLogs = [];
+          if (!parsed.nextDeliverySeq) parsed.nextDeliverySeq = 1001;
+          if (!parsed.nextPaymentSeq) parsed.nextPaymentSeq = 1001;
           if (!parsed.nextDeductionSeq) parsed.nextDeductionSeq = 1001;
           return parsed;
         }
@@ -191,6 +184,14 @@ class DatabaseManager {
       const tmpPath = `${DB_FILE}.tmp`;
       fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf-8');
       fs.renameSync(tmpPath, DB_FILE);
+
+      if (!isVercel && BUNDLED_DB_FILE && BUNDLED_DB_FILE !== DB_FILE && fs.existsSync(path.dirname(BUNDLED_DB_FILE))) {
+        try {
+          fs.writeFileSync(BUNDLED_DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
+        } catch {
+          // ignore
+        }
+      }
     } catch (e) {
       console.warn('Notice: Could not write database file to disk (read-only or serverless environment):', e);
     }
@@ -278,7 +279,10 @@ class DatabaseManager {
     linkedDeliveryId?: string;
     notes?: string;
   }): Deduction {
-    const supplier = this.getSupplierById(data.supplierId) || this.db.suppliers[0];
+    const supplier = this.getSupplierById(data.supplierId);
+    if (!supplier) {
+      throw new Error('يرجى اختيار المورد أولاً أو تسجيل مورد جديد');
+    }
     const seq = this.db.nextDeductionSeq || 1001;
     this.db.nextDeductionSeq = seq + 1;
 
@@ -340,7 +344,10 @@ class DatabaseManager {
     vodafoneRef?: string;
     notes?: string;
   }): Delivery {
-    const supplier = this.getSupplierById(data.supplierId) || this.db.suppliers[0];
+    const supplier = this.getSupplierById(data.supplierId);
+    if (!supplier) {
+      throw new Error('يرجى اختيار المورد أولاً أو تسجيل مورد جديد');
+    }
     const deliverySeq = this.db.nextDeliverySeq || 1001;
     this.db.nextDeliverySeq = deliverySeq + 1;
 
@@ -482,7 +489,10 @@ class DatabaseManager {
       }
     }
 
-    const supplier = this.getSupplierById(data.supplierId) || this.db.suppliers[0];
+    const supplier = this.getSupplierById(data.supplierId);
+    if (!supplier) {
+      throw new Error('يرجى اختيار المورد أولاً أو تسجيل مورد جديد');
+    }
     const paymentSeq = this.db.nextPaymentSeq || 1001;
     this.db.nextPaymentSeq = paymentSeq + 1;
 
@@ -578,22 +588,14 @@ class DatabaseManager {
   }
 
   resetToDemoData() {
-    this.db = getDefaultDatabase();
+    this.db = getSampleDemoDatabase();
     this.addAuditLog('system_reset', 'backup', 'reset', 'إعادة تعيين البيانات التجريبية لمطعم الشامي');
     this.commit();
   }
 
   clearAllDataForProduction() {
-    const defaultSup = this.db.suppliers[0] || {
-      id: 'sup-1',
-      name: 'تاجر بطاطس الشامي الرئيسي',
-      startDate: new Date().toISOString().split('T')[0],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
     this.db = {
-      suppliers: [defaultSup],
+      suppliers: [],
       deliveries: [],
       payments: [],
       deductions: [],
@@ -604,7 +606,7 @@ class DatabaseManager {
           action: 'system_reset',
           entityType: 'backup',
           entityId: 'clear',
-          details: 'تم مسح البيانات التجريبية وبدء دفتر الحسابات النظيف للتشغيل الفعلي.',
+          details: 'تم تصفير النظام بالكامل ومسح جميع الموردين والتوريدات والدفعات للتشغيل الفعلي النظيف.',
         },
       ],
       nextDeliverySeq: 1001,

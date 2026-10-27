@@ -217,6 +217,10 @@ app.get('/api/statement', (req, res) => {
   const { supplierId, startDate, endDate } = req.query;
   const supId = supplierId ? String(supplierId) : dbManager.getSuppliers()[0]?.id;
 
+  if (!supId) {
+    return res.json(buildChronologicalStatement([], [], undefined, undefined, []));
+  }
+
   const deliveries = dbManager.getDeliveries(supId);
   const payments = dbManager.getPayments(supId);
   const deductions = dbManager.getDeductions(supId);
@@ -236,6 +240,24 @@ app.get('/api/statement', (req, res) => {
 app.get('/api/dashboard', (req, res) => {
   const { supplierId } = req.query;
   const supId = supplierId ? String(supplierId) : dbManager.getSuppliers()[0]?.id;
+
+  if (!supId) {
+    return res.json({
+      todayDeliveryValue: 0,
+      todayPotatoWeightKg: 0,
+      todayDeliveriesCount: 0,
+      todayPaid: 0,
+      todayRemaining: 0,
+      totalCurrentDebt: 0,
+      totalCashPaidAllTime: 0,
+      totalVodafonePaidAllTime: 0,
+      totalDiscountsAllTime: 0,
+      totalWeightAllTime: 0,
+      lastDelivery: undefined,
+      lastPayment: undefined,
+      lastDeduction: undefined,
+    });
+  }
 
   const deliveries = dbManager.getDeliveries(supId);
   const payments = dbManager.getPayments(supId);
@@ -283,6 +305,18 @@ app.get('/api/dashboard', (req, res) => {
 app.get('/api/reports', (req, res) => {
   const { supplierId, period } = req.query;
   const supId = supplierId ? String(supplierId) : dbManager.getSuppliers()[0]?.id;
+
+  if (!supId) {
+    return res.json({
+      dailyBreakdown: [],
+      unpaidDeliveries: [],
+      weightedAvgPrice: 0,
+      summary: buildChronologicalStatement([], [], undefined, undefined, []).summary,
+      totalDeliveriesCount: 0,
+      totalPaymentsCount: 0,
+      totalDeductionsCount: 0,
+    });
+  }
 
   const deliveries = dbManager.getDeliveries(supId).filter((d) => d.status !== 'cancelled');
   const payments = dbManager.getPayments(supId);

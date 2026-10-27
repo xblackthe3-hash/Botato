@@ -8,9 +8,22 @@ import {
   calculateWeightedAveragePrice,
 } from './accounting.ts';
 
-const STORAGE_KEY = 'al_shami_potato_accounting_v1';
+const STORAGE_KEY = 'al_shami_potato_accounting_v4';
 
 export function getDefaultClientDatabase(): AppDatabase {
+  return {
+    suppliers: [],
+    deliveries: [],
+    payments: [],
+    deductions: [],
+    auditLogs: [],
+    nextDeliverySeq: 1001,
+    nextPaymentSeq: 1001,
+    nextDeductionSeq: 1001,
+  };
+}
+
+export function getSampleDemoClientDatabase(): AppDatabase {
   const defaultSupplier: Supplier = {
     id: 'sup-1',
     name: 'الحاج رضوان - مورد بطاطس الشامي',
@@ -59,25 +72,6 @@ export function getDefaultClientDatabase(): AppDatabase {
       createdAt: new Date('2026-10-25T08:00:00Z').toISOString(),
       updatedAt: new Date('2026-10-25T08:00:00Z').toISOString(),
     },
-    {
-      id: 'del-3',
-      deliveryNumber: 'DEL-1003',
-      supplierId: 'sup-1',
-      supplierName: defaultSupplier.name,
-      date: '2026-10-26',
-      time: '09:15',
-      weightKg: 200,
-      pricePerKg: 23.5,
-      totalAmount: 4700.0,
-      initialPaid: 3000.0,
-      remainingAmount: 1700.0,
-      paymentMethod: 'vodafone_cash',
-      vodafoneRef: 'VF-998812',
-      status: 'partial',
-      notes: 'توريدة اليوم بسعر 23.50 للكيلو - محولة فودافون كاش',
-      createdAt: new Date('2026-10-26T09:15:00Z').toISOString(),
-      updatedAt: new Date('2026-10-26T09:15:00Z').toISOString(),
-    },
   ];
 
   const samplePayments: Payment[] = [
@@ -98,21 +92,6 @@ export function getDefaultClientDatabase(): AppDatabase {
     },
   ];
 
-  const sampleDeductions: Deduction[] = [
-    {
-      id: 'ded-1',
-      deductionNumber: 'DED-1001',
-      supplierId: 'sup-1',
-      supplierName: defaultSupplier.name,
-      date: '2026-10-26',
-      time: '14:00',
-      amount: 250,
-      reason: 'بطاطس تالفة ومعيبة بالفرز 10 كجم',
-      notes: 'تم الاتفاق مع المورد بعد الفحص',
-      createdAt: new Date('2026-10-26T14:00:00Z').toISOString(),
-    },
-  ];
-
   const initialAudit: AuditLog[] = [
     {
       id: 'aud-1',
@@ -122,41 +101,17 @@ export function getDefaultClientDatabase(): AppDatabase {
       entityId: 'del-1',
       details: 'تسجيل توريدة رقم DEL-1001 بوزن 100 كجم وقيمة 2400 ج.م',
     },
-    {
-      id: 'aud-2',
-      timestamp: new Date('2026-10-25T08:00:00Z').toISOString(),
-      action: 'create_delivery',
-      entityType: 'delivery',
-      entityId: 'del-2',
-      details: 'تسجيل توريدة رقم DEL-1002 بوزن 150 كجم وقيمة 3750 ج.م ومدفوع 2000 ج.م',
-    },
-    {
-      id: 'aud-3',
-      timestamp: new Date('2026-10-26T09:15:00Z').toISOString(),
-      action: 'create_delivery',
-      entityType: 'delivery',
-      entityId: 'del-3',
-      details: 'تسجيل توريدة رقم DEL-1003 بوزن 200 كجم وقيمة 4700 ج.م ومدفوع 3000 ج.م',
-    },
-    {
-      id: 'aud-4',
-      timestamp: new Date('2026-10-26T13:00:00Z').toISOString(),
-      action: 'create_payment',
-      entityType: 'payment',
-      entityId: 'pay-1',
-      details: 'تسجيل دفعة رقم PAY-1001 بمبلغ 1000 ج.م فودافون كاش',
-    },
   ];
 
   return {
     suppliers: [defaultSupplier],
     deliveries: sampleDeliveries,
     payments: samplePayments,
-    deductions: sampleDeductions,
+    deductions: [],
     auditLogs: initialAudit,
     nextDeliverySeq: 1004,
     nextPaymentSeq: 1002,
-    nextDeductionSeq: 1002,
+    nextDeductionSeq: 1001,
   };
 }
 
@@ -172,11 +127,20 @@ class ClientDatabaseManager {
 
     if (this.isBrowser()) {
       try {
+        // Clear previous version keys that might contain old demo data
+        ['al_shami_potato_accounting_v1', 'al_shami_potato_accounting_v2', 'al_shami_potato_accounting_v3'].forEach(
+          (k) => window.localStorage.removeItem(k)
+        );
+
         const stored = window.localStorage.getItem(STORAGE_KEY);
         if (stored) {
           const parsed = JSON.parse(stored);
-          if (parsed.suppliers && parsed.deliveries) {
+          if (Array.isArray(parsed.suppliers) && Array.isArray(parsed.deliveries)) {
+            if (!parsed.payments) parsed.payments = [];
             if (!parsed.deductions) parsed.deductions = [];
+            if (!parsed.auditLogs) parsed.auditLogs = [];
+            if (!parsed.nextDeliverySeq) parsed.nextDeliverySeq = 1001;
+            if (!parsed.nextPaymentSeq) parsed.nextPaymentSeq = 1001;
             if (!parsed.nextDeductionSeq) parsed.nextDeductionSeq = 1001;
             this.memoryDb = parsed;
             return parsed;
@@ -208,11 +172,11 @@ class ClientDatabaseManager {
   syncFromRemote(remoteDb: Partial<AppDatabase>) {
     const current = this.load();
     const merged: AppDatabase = {
-      suppliers: remoteDb.suppliers || current.suppliers,
-      deliveries: remoteDb.deliveries || current.deliveries,
-      payments: remoteDb.payments || current.payments,
-      deductions: remoteDb.deductions || current.deductions,
-      auditLogs: remoteDb.auditLogs || current.auditLogs,
+      suppliers: remoteDb.suppliers !== undefined ? remoteDb.suppliers : current.suppliers,
+      deliveries: remoteDb.deliveries !== undefined ? remoteDb.deliveries : current.deliveries,
+      payments: remoteDb.payments !== undefined ? remoteDb.payments : current.payments,
+      deductions: remoteDb.deductions !== undefined ? remoteDb.deductions : current.deductions,
+      auditLogs: remoteDb.auditLogs !== undefined ? remoteDb.auditLogs : current.auditLogs,
       nextDeliverySeq: remoteDb.nextDeliverySeq || current.nextDeliverySeq,
       nextPaymentSeq: remoteDb.nextPaymentSeq || current.nextPaymentSeq,
       nextDeductionSeq: remoteDb.nextDeductionSeq || current.nextDeductionSeq,
@@ -301,7 +265,10 @@ class ClientDatabaseManager {
     notes?: string;
   }): Deduction {
     const db = this.load();
-    const supplier = this.getSupplierById(data.supplierId) || db.suppliers[0];
+    const supplier = this.getSupplierById(data.supplierId);
+    if (!supplier) {
+      throw new Error('يرجى اختيار المورد أولاً أو تسجيل مورد جديد');
+    }
     const seq = db.nextDeductionSeq || 1001;
     db.nextDeductionSeq = seq + 1;
 
@@ -360,7 +327,10 @@ class ClientDatabaseManager {
     notes?: string;
   }): Delivery {
     const db = this.load();
-    const supplier = this.getSupplierById(data.supplierId) || db.suppliers[0];
+    const supplier = this.getSupplierById(data.supplierId);
+    if (!supplier) {
+      throw new Error('يرجى اختيار المورد أولاً أو تسجيل مورد جديد');
+    }
     const deliverySeq = db.nextDeliverySeq || 1001;
     db.nextDeliverySeq = deliverySeq + 1;
 
@@ -504,7 +474,10 @@ class ClientDatabaseManager {
       }
     }
 
-    const supplier = this.getSupplierById(data.supplierId) || db.suppliers[0];
+    const supplier = this.getSupplierById(data.supplierId);
+    if (!supplier) {
+      throw new Error('يرجى اختيار المورد أولاً أو تسجيل مورد جديد');
+    }
     const paymentSeq = db.nextPaymentSeq || 1001;
     db.nextPaymentSeq = paymentSeq + 1;
 
@@ -588,22 +561,13 @@ class ClientDatabaseManager {
   }
 
   resetToDemoData() {
-    const initial = getDefaultClientDatabase();
+    const initial = getSampleDemoClientDatabase();
     this.save(initial);
   }
 
   clearAllDataForProduction() {
-    const current = this.load();
-    const defaultSup = current.suppliers[0] || {
-      id: 'sup-1',
-      name: 'تاجر بطاطس الشامي الرئيسي',
-      startDate: new Date().toISOString().split('T')[0],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
     const emptyDb: AppDatabase = {
-      suppliers: [defaultSup],
+      suppliers: [],
       deliveries: [],
       payments: [],
       deductions: [],
@@ -614,7 +578,7 @@ class ClientDatabaseManager {
           action: 'system_reset',
           entityType: 'backup',
           entityId: 'clear',
-          details: 'تم مسح البيانات التجريبية وبدء دفتر الحسابات النظيف للتشغيل الفعلي.',
+          details: 'تم تصفير النظام بالكامل ومسح جميع الموردين والتوريدات والدفعات للتشغيل الفعلي النظيف.',
         },
       ],
       nextDeliverySeq: 1001,

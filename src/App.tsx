@@ -83,12 +83,16 @@ export default function App() {
       .getSuppliers()
       .then((list) => {
         setSuppliers(list);
-        if (list.length > 0 && !activeSupplierId) {
-          setActiveSupplierId(list[0].id);
+        if (list.length > 0) {
+          if (!activeSupplierId || !list.some((s) => s.id === activeSupplierId)) {
+            setActiveSupplierId(list[0].id);
+          }
+        } else {
+          setActiveSupplierId('');
         }
       })
       .catch((err) => console.error('Failed to load suppliers:', err));
-  }, []);
+  }, [activeSupplierId]);
 
   // Refresh all data when activeSupplierId changes or after mutations
   const refreshData = useCallback(async () => {
