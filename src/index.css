@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Cairo', 'IBM Plex Sans Arabic', system-ui, -apple-system, sans-serif;
+  }
+}
+
+@media print {
+  /* Hide non-printable app chrome */
+  .no-print,
+  nav,
+  header,
+  aside,
+  button:not(.allow-print),
+  .toast-container {
+    display: none !important;
+  }
+
+  body {
+    background: white !important;
+    color: black !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .printable-area {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 10px !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  /* Thermal 80mm */
+  .thermal-80 {
+    width: 78mm !important;
+    max-width: 78mm !important;
+    margin: 0 auto !important;
+    font-size: 11px !important;
+    line-height: 1.3 !important;
+  }
+
+  /* Thermal 58mm */
+  .thermal-58 {
+    width: 56mm !important;
+    max-width: 56mm !important;
+    margin: 0 auto !important;
+    font-size: 10px !important;
+    line-height: 1.25 !important;
+  }
+
+  /* Page break rules */
+  .page-break {
+    page-break-after: always;
+  }
+}

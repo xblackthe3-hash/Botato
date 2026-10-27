@@ -1,0 +1,235 @@
+{
+  "suppliers": [
+    {
+      "id": "sup-1",
+      "name": "الحاج رضوان - مورد بطاطس الشامي",
+      "phone": "01012345678",
+      "address": "سوق الجملة المركزي - عنبر الخضار",
+      "notes": "المورد المعتمد لتوريد بطاطس التحمير (سبونتا وهيرميس) لمطعم الشامي",
+      "startDate": "2026-10-15",
+      "createdAt": "2026-10-15T08:00:00.000Z",
+      "updatedAt": "2026-10-15T08:00:00.000Z"
+    }
+  ],
+  "deliveries": [
+    {
+      "id": "del-1793055136192-735",
+      "deliveryNumber": "DEL-1004",
+      "supplierId": "sup-1",
+      "supplierName": "الحاج رضوان - مورد بطاطس الشامي",
+      "date": "2026-10-26",
+      "time": "٢٢:٥١",
+      "weightKg": 150,
+      "pricePerKg": 25,
+      "totalAmount": 3750,
+      "initialPaid": 2000,
+      "remainingAmount": 1750,
+      "paymentMethod": "cash",
+      "vodafoneRef": "",
+      "status": "partial",
+      "notes": "",
+      "createdAt": "2026-10-26T22:52:16.192Z",
+      "updatedAt": "2026-10-26T22:52:16.192Z"
+    },
+    {
+      "id": "del-1",
+      "deliveryNumber": "DEL-1001",
+      "supplierId": "sup-1",
+      "supplierName": "الحاج رضوان - مورد بطاطس الشامي",
+      "date": "2026-10-24",
+      "time": "07:30",
+      "weightKg": 100,
+      "pricePerKg": 24,
+      "totalAmount": 2400,
+      "initialPaid": 2400,
+      "remainingAmount": 0,
+      "paymentMethod": "cash",
+      "status": "paid",
+      "notes": "توريدة صباحية - بطاطس تحمير فرز أول",
+      "createdAt": "2026-10-24T07:30:00.000Z",
+      "updatedAt": "2026-10-24T07:30:00.000Z"
+    },
+    {
+      "id": "del-2",
+      "deliveryNumber": "DEL-1002",
+      "supplierId": "sup-1",
+      "supplierName": "الحاج رضوان - مورد بطاطس الشامي",
+      "date": "2026-10-25",
+      "time": "08:00",
+      "weightKg": 150,
+      "pricePerKg": 25,
+      "totalAmount": 3750,
+      "initialPaid": 2000,
+      "remainingAmount": 1750,
+      "paymentMethod": "cash",
+      "status": "partial",
+      "notes": "توريدة العصر - تم سداد 2000 نقداً والباقي آجل",
+      "createdAt": "2026-10-25T08:00:00.000Z",
+      "updatedAt": "2026-10-25T08:00:00.000Z"
+    },
+    {
+      "id": "del-3",
+      "deliveryNumber": "DEL-1003",
+      "supplierId": "sup-1",
+      "supplierName": "الحاج رضوان - مورد بطاطس الشامي",
+      "date": "2026-10-26",
+      "time": "09:15",
+      "weightKg": 200,
+      "pricePerKg": 23.5,
+      "totalAmount": 4700,
+      "initialPaid": 3000,
+      "remainingAmount": 1700,
+      "paymentMethod": "vodafone_cash",
+      "vodafoneRef": "VF-998812",
+      "status": "partial",
+      "notes": "توريدة اليوم بسعر 23.50 للكيلو - محولة فودافون كاش",
+      "createdAt": "2026-10-26T09:15:00.000Z",
+      "updatedAt": "2026-10-26T09:15:00.000Z"
+    }
+  ],
+  "payments": [
+    {
+      "id": "pay-1793055169692-996",
+      "paymentNumber": "PAY-1002",
+      "supplierId": "sup-1",
+      "supplierName": "الحاج رضوان - مورد بطاطس الشامي",
+      "date": "2026-10-26",
+      "time": "٢٢:٥١",
+      "amount": 4200,
+      "paymentMethod": "vodafone_cash",
+      "vodafoneRef": "",
+      "linkedDeliveryIds": [],
+      "notes": "",
+      "idempotencyKey": "pay_key_1793055148051_1d74n8",
+      "createdAt": "2026-10-26T22:52:49.692Z"
+    },
+    {
+      "id": "pay-1",
+      "paymentNumber": "PAY-1001",
+      "supplierId": "sup-1",
+      "supplierName": "الحاج رضوان - مورد بطاطس الشامي",
+      "date": "2026-10-26",
+      "time": "13:00",
+      "amount": 1000,
+      "paymentMethod": "vodafone_cash",
+      "vodafoneRef": "VF-771239",
+      "linkedDeliveryIds": [
+        "del-2"
+      ],
+      "notes": "دفعة سداد حساب من المتبقي السابق لفاتورة DEL-1002",
+      "idempotencyKey": "init-pay-1",
+      "createdAt": "2026-10-26T13:00:00.000Z"
+    }
+  ],
+  "auditLogs": [
+    {
+      "id": "aud-1793056291653-hr7e53",
+      "timestamp": "2026-10-26T23:11:31.653Z",
+      "action": "create_deduction",
+      "entityType": "deduction",
+      "entityId": "ded-1793056291653-43",
+      "details": "تسجيل خصم مالي DED-1002 بمبلغ 100 ج.م من حساب الحاج رضوان - مورد بطاطس الشامي - السبب: بطاطس تالفة ومعيبة بالفرز"
+    },
+    {
+      "id": "aud-1793056218414-je50q7",
+      "timestamp": "2026-10-26T23:10:18.414Z",
+      "action": "create_deduction",
+      "entityType": "deduction",
+      "entityId": "ded-1793056218408-14",
+      "details": "تسجيل خصم مالي DED-1001 بمبلغ 250 ج.م من حساب الحاج رضوان - مورد بطاطس الشامي - السبب: بطاطس تالفة ومعيبة بالفرز 10 كجم"
+    },
+    {
+      "id": "aud-1793056212007-q7um7w",
+      "timestamp": "2026-10-26T23:10:12.007Z",
+      "action": "delete_supplier",
+      "entityType": "supplier",
+      "entityId": "sup-1793056208425",
+      "details": "حذف المورد: مورد تجريبي للحذف وحذف كافة سجلاته المالية"
+    },
+    {
+      "id": "aud-1793056208425-i4jj53",
+      "timestamp": "2026-10-26T23:10:08.425Z",
+      "action": "create_delivery",
+      "entityType": "supplier",
+      "entityId": "sup-1793056208425",
+      "details": "إضافة مورد جديد: مورد تجريبي للحذف"
+    },
+    {
+      "id": "aud-1793055169692-t0rz3n",
+      "timestamp": "2026-10-26T22:52:49.692Z",
+      "action": "create_payment",
+      "entityType": "payment",
+      "entityId": "pay-1793055169692-996",
+      "details": "تسجيل دفعة مالية PAY-1002 بمبلغ 4200 ج.م طريقة (فودافون كاش) للمورد الحاج رضوان - مورد بطاطس الشامي"
+    },
+    {
+      "id": "aud-1793055136192-nxitij",
+      "timestamp": "2026-10-26T22:52:16.192Z",
+      "action": "create_delivery",
+      "entityType": "delivery",
+      "entityId": "del-1793055136192-735",
+      "details": "تسجيل توريدة DEL-1004 بوزن 150 كجم بسعر 25 ج.م (إجمالي: 3750 ج.م، مدفوع: 2000 ج.م)"
+    },
+    {
+      "id": "aud-1",
+      "timestamp": "2026-10-24T07:30:00.000Z",
+      "action": "create_delivery",
+      "entityType": "delivery",
+      "entityId": "del-1",
+      "details": "تسجيل توريدة رقم DEL-1001 بوزن 100 كجم وقيمة 2400 ج.م"
+    },
+    {
+      "id": "aud-2",
+      "timestamp": "2026-10-25T08:00:00.000Z",
+      "action": "create_delivery",
+      "entityType": "delivery",
+      "entityId": "del-2",
+      "details": "تسجيل توريدة رقم DEL-1002 بوزن 150 كجم وقيمة 3750 ج.م ومدفوع 2000 ج.م"
+    },
+    {
+      "id": "aud-3",
+      "timestamp": "2026-10-26T09:15:00.000Z",
+      "action": "create_delivery",
+      "entityType": "delivery",
+      "entityId": "del-3",
+      "details": "تسجيل توريدة رقم DEL-1003 بوزن 200 كجم وقيمة 4700 ج.م ومدفوع 3000 ج.م"
+    },
+    {
+      "id": "aud-4",
+      "timestamp": "2026-10-26T13:00:00.000Z",
+      "action": "create_payment",
+      "entityType": "payment",
+      "entityId": "pay-1",
+      "details": "تسجيل دفعة رقم PAY-1001 بمبلغ 1000 ج.م فودافون كاش"
+    }
+  ],
+  "nextDeliverySeq": 1005,
+  "nextPaymentSeq": 1003,
+  "deductions": [
+    {
+      "id": "ded-1793056291653-43",
+      "deductionNumber": "DED-1002",
+      "supplierId": "sup-1",
+      "supplierName": "الحاج رضوان - مورد بطاطس الشامي",
+      "date": "2026-10-26",
+      "time": "٢٣:١٠",
+      "amount": 100,
+      "reason": "بطاطس تالفة ومعيبة بالفرز",
+      "notes": "",
+      "createdAt": "2026-10-26T23:11:31.653Z"
+    },
+    {
+      "id": "ded-1793056218408-14",
+      "deductionNumber": "DED-1001",
+      "supplierId": "sup-1",
+      "supplierName": "الحاج رضوان - مورد بطاطس الشامي",
+      "date": "2026-10-26",
+      "time": "٢٣:١٠",
+      "amount": 250,
+      "reason": "بطاطس تالفة ومعيبة بالفرز 10 كجم",
+      "notes": "تم الاتفاق مع المورد",
+      "createdAt": "2026-10-26T23:10:18.414Z"
+    }
+  ],
+  "nextDeductionSeq": 1003
+}
